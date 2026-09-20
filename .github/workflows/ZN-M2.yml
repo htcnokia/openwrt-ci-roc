@@ -25,7 +25,7 @@ jobs:
     with:
       repo_url: https://github.com/laipeng668/openwrt-6.x.git
       repo_branch: 25.12-nss
-      config_file: configs/ZN-M2-WIRED.config
+      config_file: configs/ZN-M2-WIRED.txt
       firmware_tag: ZN-M2-WIRED
       kernel_file: kernel-6.12
       artifact_prefix: ZN-M2-WIRED
