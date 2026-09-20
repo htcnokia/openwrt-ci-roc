@@ -1,0 +1,346 @@
+name: Auto Sync Upstream
+
+on:
+  schedule:
+    - cron: "30 21 * * *"
+
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  actions: write
+
+jobs:
+  sync_and_trigger:
+    runs-on: ubuntu-latest
+    name: Backup private files, sync upstream, restore, update README, clean releases, trigger ZN-M2
+
+    steps:
+      - name: Checkout repo with PAT
+        uses: actions/checkout@v4
+        with:
+          ref: master
+          token: ${{ secrets.PAT_TOKEN2 }}
+          persist-credentials: true
+          fetch-depth: 0
+
+      - name: Backup private workflow and config files before sync
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          backup_dir="${RUNNER_TEMP}/private-backup"
+          backup_workflows="${backup_dir}/workflows"
+          backup_configs="${backup_dir}/configs"
+
+          rm -rf "$backup_dir"
+          mkdir -p "$backup_workflows" "$backup_configs"
+
+          for file in \
+            ".github/workflows/Auto-Sync.yml" \
+            ".github/workflows/ZN-M2.yml" \
+            "configs/ZN-M2-WIRED.config"; do
+            if [ ! -s "$file" ]; then
+              echo "::error::Required private file is missing or empty: $file"
+              exit 1
+            fi
+          done
+
+          cp -af \
+            ".github/workflows/Auto-Sync.yml" \
+            "$backup_workflows/Auto-Sync.yml"
+
+          cp -af \
+            ".github/workflows/ZN-M2.yml" \
+            "$backup_workflows/ZN-M2.yml"
+
+          cp -af \
+            "configs/ZN-M2-WIRED.config" \
+            "$backup_configs/ZN-M2-WIRED.config"
+
+          backup_count="$(find "$backup_dir" -type f | wc -l)"
+
+          if [ "$backup_count" -lt 3 ]; then
+            echo "::error::Private backup incomplete: $backup_count files"
+            find "$backup_dir" -type f -print
+            exit 1
+          fi
+
+          echo "Private files backed up:"
+          find "$backup_dir" -type f -print
+
+      - name: Upload private backup artifact
+        uses: actions/upload-artifact@v4
+        with:
+          name: private-zn-backup-${{ github.run_id }}
+          path: ${{ runner.temp }}/private-backup/
+          if-no-files-found: error
+          retention-days: 30
+
+      - name: Sync upstream repository
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          git config user.name "github-actions[bot]"
+          git config user.email "github-actions[bot]@users.noreply.github.com"
+
+          if git remote get-url upstream >/dev/null 2>&1; then
+            git remote set-url \
+              upstream \
+              https://github.com/laipeng668/openwrt-ci-roc.git
+          else
+            git remote add \
+              upstream \
+              https://github.com/laipeng668/openwrt-ci-roc.git
+          fi
+
+          git fetch --prune upstream master
+          git reset --hard upstream/master
+          git clean -fd
+
+          mkdir -p .github/workflows configs
+
+
+      - name: Restore private workflow and config files after sync
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          backup_dir="${RUNNER_TEMP}/private-backup"
+
+          for file in \
+            "$backup_dir/workflows/Auto-Sync.yml" \
+            "$backup_dir/workflows/ZN-M2.yml" \
+            "$backup_dir/configs/ZN-M2-WIRED.config"; do
+            if [ ! -s "$file" ]; then
+              echo "::error::Backup file is missing or empty: $file"
+              exit 1
+            fi
+          done
+
+          mkdir -p .github/workflows configs
+
+          cp -af \
+            "$backup_dir/workflows/Auto-Sync.yml" \
+            ".github/workflows/Auto-Sync.yml"
+
+          cp -af \
+            "$backup_dir/workflows/ZN-M2.yml" \
+            ".github/workflows/ZN-M2.yml"
+
+          cp -af \
+            "$backup_dir/configs/ZN-M2-WIRED.config" \
+            "configs/ZN-M2-WIRED.config"
+
+          for file in \
+            ".github/workflows/Auto-Sync.yml" \
+            ".github/workflows/ZN-M2.yml" \
+            "configs/ZN-M2-WIRED.config"; do
+            if [ ! -s "$file" ]; then
+              echo "::error::Restore failed or file is empty: $file"
+              exit 1
+            fi
+          done
+
+          echo "Private files restored successfully"
+
+      - name: Validate restored private files
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          for file in \
+            ".github/workflows/Auto-Sync.yml" \
+            ".github/workflows/ZN-M2.yml" \
+            "configs/ZN-M2-WIRED.config"; do
+            if [ ! -s "$file" ]; then
+              echo "::error::Required file is missing or empty: $file"
+              exit 1
+            fi
+          done
+
+          if ! grep -Eq \
+            '^[[:space:]]*workflow_dispatch:' \
+            ".github/workflows/ZN-M2.yml"; then
+            echo "::error::ZN-M2.yml has no workflow_dispatch trigger"
+            exit 1
+          fi
+
+          if ! grep -qF \
+            "config_file: configs/ZN-M2-WIRED.config" \
+            ".github/workflows/ZN-M2.yml"; then
+            echo "::error::ZN-M2.yml does not reference configs/ZN-M2-WIRED.config"
+            exit 1
+          fi
+
+          echo "Private files validated successfully"
+
+      - name: Update README to sync date
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          sync_time="$(TZ=Asia/Shanghai date '+%y.%m.%d-%H.%M.%S')"
+          printf '%s\n' "Sync updated at $sync_time" > README.md
+
+      - name: Inject private package sources into Roc-script
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          script="scripts/Roc-script.sh"
+          marker="# ZN-M2 private package sources injected by Auto-Sync"
+
+          if [ ! -f "$script" ]; then
+            echo "::error::${script} not found"
+            exit 1
+          fi
+
+          if grep -qF "$marker" "$script"; then
+            echo "Private package source block already exists"
+          else
+            private_block="$(mktemp)"
+
+            printf '%s\n' \
+              "" \
+              "$marker" \
+              "if package_enabled luci-app-timecontrol; then" \
+              "  rm -rf feeds/luci/applications/luci-app-timecontrol" \
+              "  clone_repository https://github.com/gaobin89/luci-app-timecontrol js feeds/luci/applications/luci-app-timecontrol" \
+              "fi" \
+              "" \
+              "if package_enabled luci-app-homeproxy; then" \
+              "  rm -rf feeds/luci/applications/luci-app-homeproxy" \
+              "  clone_repository https://github.com/XiaoHaiSly/luci-app-homeproxy main feeds/luci/applications/luci-app-homeproxy" \
+              "fi" \
+              "" \
+              "if package_enabled luci-app-bandix; then" \
+              "  rm -rf feeds/luci/applications/openwrt-bandix" \
+              "  rm -rf feeds/luci/applications/luci-app-bandix" \
+              "  clone_repository https://github.com/timsaya/openwrt-bandix main feeds/luci/applications/openwrt-bandix" \
+              "  clone_repository https://github.com/timsaya/luci-app-bandix main feeds/luci/applications/luci-app-bandix" \
+              "fi" \
+              "" \
+              "if package_enabled luci-app-gecoosac; then" \
+              "  rm -rf feeds/luci/applications/luci-app-gecoosac" \
+              "  clone_repository https://github.com/laipeng668/luci-app-gecoosac main feeds/luci/applications/luci-app-gecoosac" \
+              "fi" \
+              > "$private_block"
+
+            if awk -v block_file="$private_block" '
+              BEGIN {
+                while ((getline line < block_file) > 0) {
+                  block = block line ORS
+                }
+                close(block_file)
+              }
+
+              $0 == "./scripts/feeds update -i -a" {
+                if (!inserted) {
+                  printf "%s", block
+                  inserted = 1
+                }
+              }
+
+              {
+                print
+              }
+
+              END {
+                if (!inserted) {
+                  exit 42
+                }
+              }
+            ' "$script" > "${script}.tmp"; then
+              mv "${script}.tmp" "$script"
+            else
+              status=$?
+
+              rm -f "$private_block" "${script}.tmp"
+
+              if [ "$status" -eq 42 ]; then
+                echo "::error::Target line './scripts/feeds update -i -a' was not found in ${script}"
+              else
+                echo "::error::Failed to inject private package sources into ${script}"
+              fi
+
+              exit "$status"
+            fi
+
+            rm -f "$private_block"
+            chmod +x "$script"
+          fi
+
+          bash -n "$script"
+
+          echo "Private package sources in ${script}:"
+          grep -nE \
+            'timecontrol|homeproxy|openwrt-bandix|luci-app-bandix|gecoosac' \
+            "$script" || true
+
+      - name: Commit synced changes
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          if [ -n "$(git status --porcelain)" ]; then
+            git add .
+
+            git commit \
+              -m "chore: auto sync upstream and restore private ZN files"
+
+            git push --force origin master
+          else
+            echo "No changes to commit"
+          fi
+
+
+      - name: Delete all releases
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN2 }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          gh release list \
+            --repo "$GITHUB_REPOSITORY" \
+            --limit 1000 \
+            --json tagName \
+            --jq '.[].tagName' |
+          while IFS= read -r tag; do
+            if [ -z "$tag" ]; then
+              continue
+            fi
+
+            echo "Deleting release: $tag"
+
+            gh release delete "$tag" \
+              --repo "$GITHUB_REPOSITORY" \
+              --yes
+          done
+
+      - name: Trigger ZN-M2 workflow
+        env:
+          GH_TOKEN: ${{ secrets.PAT_TOKEN2 }}
+        shell: bash
+        run: |
+          set -Eeuo pipefail
+
+          workflow_file=".github/workflows/ZN-M2.yml"
+
+          if [ ! -s "$workflow_file" ]; then
+            echo "::error::${workflow_file} is missing or empty"
+            exit 1
+          fi
+
+          if ! grep -Eq \
+            '^[[:space:]]*workflow_dispatch:' \
+            "$workflow_file"; then
+            echo "::error::${workflow_file} does not support workflow_dispatch"
+            exit 1
+          fi
+
+          gh workflow run "ZN-M2.yml" \
+            --repo "$GITHUB_REPOSITORY" \
+            --ref master

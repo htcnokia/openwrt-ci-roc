@@ -336,5 +336,28 @@ fi
 # 清理 PassWall 的 chnlist 规则文件
 # echo "baidu.com"  > package/luci-app-passwall/luci-app-passwall/root/usr/share/passwall/rules/chnlist
 
+
+# ZN-M2 private package sources injected by Auto-Sync
+if package_enabled luci-app-timecontrol; then
+  rm -rf feeds/luci/applications/luci-app-timecontrol
+  clone_repository https://github.com/gaobin89/luci-app-timecontrol js feeds/luci/applications/luci-app-timecontrol
+fi
+
+if package_enabled luci-app-homeproxy; then
+  rm -rf feeds/luci/applications/luci-app-homeproxy
+  clone_repository https://github.com/XiaoHaiSly/luci-app-homeproxy main feeds/luci/applications/luci-app-homeproxy
+fi
+
+if package_enabled luci-app-bandix; then
+  rm -rf feeds/luci/applications/openwrt-bandix
+  rm -rf feeds/luci/applications/luci-app-bandix
+  clone_repository https://github.com/timsaya/openwrt-bandix main feeds/luci/applications/openwrt-bandix
+  clone_repository https://github.com/timsaya/luci-app-bandix main feeds/luci/applications/luci-app-bandix
+fi
+
+if package_enabled luci-app-gecoosac; then
+  rm -rf feeds/luci/applications/luci-app-gecoosac
+  clone_repository https://github.com/laipeng668/luci-app-gecoosac main feeds/luci/applications/luci-app-gecoosac
+fi
 ./scripts/feeds update -i -a
 ./scripts/feeds install -a

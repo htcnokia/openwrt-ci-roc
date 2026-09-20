@@ -1,0 +1,35 @@
+name: ZN-M2
+
+on:
+  workflow_dispatch:
+  workflow_call:
+
+  # schedule:
+  #   - cron: "0 18 * * *"
+
+permissions:
+  contents: read
+  actions: read
+
+jobs:
+  build:
+    name: Build ZN-M2 Wired NSS Firmware
+    uses: ./.github/workflows/Build-OpenWrt.yml
+
+    permissions:
+      contents: write
+      actions: write
+
+    secrets: inherit
+
+    with:
+      repo_url: https://github.com/laipeng668/openwrt-6.x.git
+      repo_branch: 25.12-nss
+      config_file: configs/ZN-M2-WIRED.config
+      firmware_tag: ZN-M2-WIRED
+      kernel_file: kernel-6.12
+      artifact_prefix: ZN-M2-WIRED
+      manifest_file: libwrt-qualcommax-ipq60xx.manifest
+      release_summary: >-
+        这是 ZN-M2 机型的有线版 OpenWrt 固件。
+        该固件采用与 IPQ60XX 一致的基础源码和编译链路，仅替换为 ZN-M2 专用配置。
