@@ -39,7 +39,7 @@ jobs:
           for file in \
             ".github/workflows/Auto-Sync.yml" \
             ".github/workflows/ZN-M2.yml" \
-            "configs/ZN-M2-WIRED.config"; do
+            "configs/ZN-M2-WIRED.txt"; do
             if [ ! -s "$file" ]; then
               echo "::error::Required private file is missing or empty: $file"
               exit 1
@@ -55,8 +55,8 @@ jobs:
             "$backup_workflows/ZN-M2.yml"
 
           cp -af \
-            "configs/ZN-M2-WIRED.config" \
-            "$backup_configs/ZN-M2-WIRED.config"
+            "configs/ZN-M2-WIRED.txt" \
+            "$backup_configs/ZN-M2-WIRED.txt"
 
           backup_count="$(find "$backup_dir" -type f | wc -l)"
 
@@ -112,7 +112,7 @@ jobs:
           for file in \
             "$backup_dir/workflows/Auto-Sync.yml" \
             "$backup_dir/workflows/ZN-M2.yml" \
-            "$backup_dir/configs/ZN-M2-WIRED.config"; do
+            "$backup_dir/configs/ZN-M2-WIRED.txt"; do
             if [ ! -s "$file" ]; then
               echo "::error::Backup file is missing or empty: $file"
               exit 1
@@ -131,12 +131,12 @@ jobs:
 
           cp -af \
             "$backup_dir/configs/ZN-M2-WIRED.config" \
-            "configs/ZN-M2-WIRED.config"
+            "configs/ZN-M2-WIRED.txt"
 
           for file in \
             ".github/workflows/Auto-Sync.yml" \
             ".github/workflows/ZN-M2.yml" \
-            "configs/ZN-M2-WIRED.config"; do
+            "configs/ZN-M2-WIRED.txt"; do
             if [ ! -s "$file" ]; then
               echo "::error::Restore failed or file is empty: $file"
               exit 1
@@ -153,7 +153,7 @@ jobs:
           for file in \
             ".github/workflows/Auto-Sync.yml" \
             ".github/workflows/ZN-M2.yml" \
-            "configs/ZN-M2-WIRED.config"; do
+            "configs/ZN-M2-WIRED.txt"; do
             if [ ! -s "$file" ]; then
               echo "::error::Required file is missing or empty: $file"
               exit 1
@@ -168,9 +168,9 @@ jobs:
           fi
 
           if ! grep -qF \
-            "config_file: configs/ZN-M2-WIRED.config" \
+            "config_file: configs/ZN-M2-WIRED.txt" \
             ".github/workflows/ZN-M2.yml"; then
-            echo "::error::ZN-M2.yml does not reference configs/ZN-M2-WIRED.config"
+            echo "::error::ZN-M2.yml does not reference configs/ZN-M2-WIRED.txt"
             exit 1
           fi
 
