@@ -13,7 +13,7 @@ permissions:
 jobs:
   sync_and_trigger:
     runs-on: ubuntu-latest
-    name: Backup private files, sync upstream, restore, update README, clean releases, trigger ZN-M2
+    name: Backup private files & scripts, sync upstream, restore, update README, clean releases, trigger ZN-M2
 
     steps:
       - name: Checkout repo with PAT
@@ -24,7 +24,7 @@ jobs:
           persist-credentials: true
           fetch-depth: 0
 
-      - name: Backup private workflow and config files before sync
+      - name: Backup private workflows, configs and scripts before sync
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -32,41 +32,36 @@ jobs:
           backup_dir="${RUNNER_TEMP}/private-backup"
           backup_workflows="${backup_dir}/workflows"
           backup_configs="${backup_dir}/configs"
+          backup_scripts="${backup_dir}/scripts"
 
           rm -rf "$backup_dir"
-          mkdir -p "$backup_workflows" "$backup_configs"
+          mkdir -p "$backup_workflows" "$backup_configs" "$backup_scripts"
 
           for file in \
             ".github/workflows/Auto-Sync.yml" \
             ".github/workflows/ZN-M2.yml" \
-            "configs/ZN-M2-WIRED.txt"; do
+            "configs/ZN-M2-WIRED.txt" \
+            "scripts/Roc-script.sh"; do
             if [ ! -s "$file" ]; then
               echo "::error::Required private file is missing or empty: $file"
               exit 1
             fi
           done
 
-          cp -af \
-            ".github/workflows/Auto-Sync.yml" \
-            "$backup_workflows/Auto-Sync.yml"
-
-          cp -af \
-            ".github/workflows/ZN-M2.yml" \
-            "$backup_workflows/ZN-M2.yml"
-
-          cp -af \
-            "configs/ZN-M2-WIRED.txt" \
-            "$backup_configs/ZN-M2-WIRED.txt"
+          cp -af ".github/workflows/Auto-Sync.yml" "$backup_workflows/Auto-Sync.yml"
+          cp -af ".github/workflows/ZN-M2.yml" "$backup_workflows/ZN-M2.yml"
+          cp -af "configs/ZN-M2-WIRED.txt" "$backup_configs/ZN-M2-WIRED.txt"
+          cp -af "scripts/Roc-script.sh" "$backup_scripts/Roc-script.sh"
 
           backup_count="$(find "$backup_dir" -type f | wc -l)"
 
-          if [ "$backup_count" -lt 3 ]; then
+          if [ "$backup_count" -lt 4 ]; then
             echo "::error::Private backup incomplete: $backup_count files"
             find "$backup_dir" -type f -print
             exit 1
           fi
 
-          echo "Private files backed up:"
+          echo "Private files & scripts backed up:"
           find "$backup_dir" -type f -print
 
       - name: Upload private backup artifact
@@ -99,10 +94,9 @@ jobs:
           git reset --hard upstream/master
           git clean -fd
 
-          mkdir -p .github/workflows configs
+          mkdir -p .github/workflows configs scripts
 
-
-      - name: Restore private workflow and config files after sync
+      - name: Restore private workflow, config and script files after sync
         shell: bash
         run: |
           set -Eeuo pipefail
@@ -112,38 +106,33 @@ jobs:
           for file in \
             "$backup_dir/workflows/Auto-Sync.yml" \
             "$backup_dir/workflows/ZN-M2.yml" \
-            "$backup_dir/configs/ZN-M2-WIRED.txt"; do
+            "$backup_dir/configs/ZN-M2-WIRED.txt" \
+            "$backup_dir/scripts/Roc-script.sh"; do
             if [ ! -s "$file" ]; then
               echo "::error::Backup file is missing or empty: $file"
               exit 1
             fi
           done
 
-          mkdir -p .github/workflows configs
+          mkdir -p .github/workflows configs scripts
 
-          cp -af \
-            "$backup_dir/workflows/Auto-Sync.yml" \
-            ".github/workflows/Auto-Sync.yml"
-
-          cp -af \
-            "$backup_dir/workflows/ZN-M2.yml" \
-            ".github/workflows/ZN-M2.yml"
-
-          cp -af \
-            "$backup_dir/configs/ZN-M2-WIRED.config" \
-            "configs/ZN-M2-WIRED.txt"
+          cp -af "$backup_dir/workflows/Auto-Sync.yml" ".github/workflows/Auto-Sync.yml"
+          cp -af "$backup_dir/workflows/ZN-M2.yml" ".github/workflows/ZN-M2.yml"
+          cp -af "$backup_dir/configs/ZN-M2-WIRED.txt" "configs/ZN-M2-WIRED.txt"
+          cp -af "$backup_dir/scripts/Roc-script.sh" "scripts/Roc-script.sh"
 
           for file in \
             ".github/workflows/Auto-Sync.yml" \
             ".github/workflows/ZN-M2.yml" \
-            "configs/ZN-M2-WIRED.txt"; do
+            "configs/ZN-M2-WIRED.txt" \
+            "scripts/Roc-script.sh"; do
             if [ ! -s "$file" ]; then
               echo "::error::Restore failed or file is empty: $file"
               exit 1
             fi
           done
 
-          echo "Private files restored successfully"
+          echo "Private files & scripts restored successfully"
 
       - name: Validate restored private files
         shell: bash
@@ -153,7 +142,8 @@ jobs:
           for file in \
             ".github/workflows/Auto-Sync.yml" \
             ".github/workflows/ZN-M2.yml" \
-            "configs/ZN-M2-WIRED.txt"; do
+            "configs/ZN-M2-WIRED.txt" \
+            "scripts/ZN-script.sh"; do
             if [ ! -s "$file" ]; then
               echo "::error::Required file is missing or empty: $file"
               exit 1
@@ -189,7 +179,7 @@ jobs:
         run: |
           set -Eeuo pipefail
 
-          script="scripts/Roc-script.sh"
+          script="scripts/ZN-script.sh"
           marker="# ZN-M2 private package sources injected by Auto-Sync"
 
           if [ ! -f "$script" ]; then
@@ -288,13 +278,12 @@ jobs:
             git add .
 
             git commit \
-              -m "chore: auto sync upstream and restore private ZN files"
+              -m "chore: auto sync upstream and restore private ZN files & scripts"
 
             git push --force origin master
           else
             echo "No changes to commit"
           fi
-
 
       - name: Delete all releases
         env:
